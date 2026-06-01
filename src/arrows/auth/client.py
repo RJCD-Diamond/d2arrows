@@ -104,7 +104,10 @@ class OIDCClient:
 
     def get_auth_token(self):
 
-        ### except this logs in the user and opens a browser window, so not ideal for a client library. But it is the only way I have found to get a token without having to set up a client secret or use the password grant type, which is not recommended.
+        ### except this logs in the user and opens a browser window, 
+        # so not ideal for a client library. 
+        # But it is the only way I have found to get a token without having to set up a 
+        # client secret or use the password grant type, which is not recommended.
 
         token = self.get_specific_auth_token(issuer=self.issuer, oidc_client_id="workflows-dashboard")
         

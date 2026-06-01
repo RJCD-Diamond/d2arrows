@@ -13,7 +13,6 @@ classifiers = [
     "Programming Language :: Python :: 3.14",
 ]
 description = "A package containing python clients for communicating with various DII systems"
-description = "An API for small fast data analysis jobs at Diamond Light Source"
 dependencies = [
     "numpy",
     "scipy",
@@ -56,7 +55,7 @@ version_file = "src/arrows/_version.py"
 
 [tool.pyright]
 typeCheckingMode = "standard"
-reportMissingImports = false # Ignore missing stubs in imported modules
+reportMissingImports = false  # Ignore missing stubs in imported modules
 
 [tool.pytest.ini_options]
 # Run pytest with all our checkers, and don't spam us with massive tracebacks on error
