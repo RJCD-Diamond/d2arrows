@@ -13,7 +13,17 @@ classifiers = [
     "Programming Language :: Python :: 3.14",
 ]
 description = "A package containing python clients for communicating with various DII systems"
-dependencies = [] # Add project dependencies here, e.g. ["click", "numpy"]
+description = "An API for small fast data analysis jobs at Diamond Light Source"
+dependencies = [
+    "numpy",
+    "scipy",
+    "pydantic",
+    "pydantic_settings",
+    "requests",
+    "httpx",
+    "gitpython",
+    "stomp.py",
+] # Add project dependencies here, e.g. ["click", "numpy"]
 dynamic = ["version"]
 license.file = "LICENSE"
 readme = "README.md"
