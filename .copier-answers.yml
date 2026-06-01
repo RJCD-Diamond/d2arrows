@@ -1,0 +1,21 @@
+# Changes here will be overwritten by Copier
+_commit: 5.1.0
+_src_path: https://github.com/DiamondLightSource/python-copier-template.git
+author_email: richard.dixey@diamond.ac.uk
+author_name: Richard Dixey
+component_lifecycle: experimental
+component_owner: group:default/data-analysis
+component_type: library
+description: A package containing python clients for communicating with various DII
+    systems
+distribution_name: arrows
+docker: true
+docker_debug: false
+docs_type: README
+git_platform: github.com
+github_org: DiamondLightSource
+package_name: arrows
+pypi: true
+repo_name: arrows
+strict_typing: false
+type_checker: pyright
