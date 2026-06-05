@@ -2,7 +2,7 @@
 GraphQL client for workflow queries and mutations.
 
 Usage:
-    client = WorkflowClient(url="https://your-graphql-endpoint/graphql", token="your-token")
+    client = WorkflowClient(url="https://your-graphql-endpoint", token="your-token")
 
     # List workflow templates
     templates = client.get_workflow_templates(science_group="IMAGING", limit=5)
@@ -23,26 +23,26 @@ Usage:
     result = client.submit_workflow_from_template(
         template_name="example-template",
         proposal_code="mg", proposal_number=36964, visit_number=1,
-        parameters={"png": "True", "jpg": "False", "jpeg": "True", "tif": "True", "tiff": "False"}
+        parameters={"png": "True", "jpg": "False", "jpeg": "True", "tif": "True"}
     )
 """
 
 import json
-import urllib.request
 import urllib.error
+import urllib.request
 from typing import Any
-
 
 
 class GraphQLError(Exception):
     """Raised when the GraphQL response contains errors."""
+
     def __init__(self, errors: list[dict]):
         self.errors = errors
         messages = "; ".join(e.get("message", str(e)) for e in errors)
         super().__init__(f"GraphQL error(s): {messages}")
 
 
-class WorkflowClient:
+class WorkflowsClient:
     def __init__(self, url: str, token: str | None = None, timeout: int = 30):
         """
         Args:
@@ -66,7 +66,9 @@ class WorkflowClient:
         if self.token:
             headers["Authorization"] = f"Bearer {self.token}"
 
-        req = urllib.request.Request(self.url, data=payload, headers=headers, method="POST")
+        req = urllib.request.Request(
+            self.url, data=payload, headers=headers, method="POST"
+        )
 
         try:
             with urllib.request.urlopen(req, timeout=self.timeout) as resp:
@@ -75,6 +77,8 @@ class WorkflowClient:
             raise RuntimeError(f"HTTP {exc.code}: {exc.reason}") from exc
         except urllib.error.URLError as exc:
             raise RuntimeError(f"Network error: {exc.reason}") from exc
+
+        print(body)  # Debug: print full response body
 
         if errors := body.get("errors"):
             raise GraphQLError(errors)
@@ -88,7 +92,7 @@ class WorkflowClient:
     def get_workflow_templates(
         self,
         limit: int = 5,
-        science_group: str | None = "IMAGING",
+        science_group: str | None = "CRYSTALLOGRAPHY",
     ) -> list[dict]:
         """Return workflow template nodes, optionally filtered by science group."""
         query = """
@@ -264,50 +268,21 @@ class WorkflowClient:
 # Quick smoke-test (run directly: python graphql_client.py)
 # ------------------------------------------------------------------
 if __name__ == "__main__":
-    from arrows.auth.client import OIDCClient
+    from arrows.auth.auth_client import AuthClient
 
-    client = OIDCClient()
-    client.list_reponse()
+    client = AuthClient()
+    print("Getting token")
+    # client.list_reponse()
     TOKEN = client.get_auth_token()
+    print("Token:", TOKEN)
+
     print("Token:", TOKEN)
 
     ENDPOINT = "https://workflows.diamond.ac.uk/graphql"
 
+    client = WorkflowsClient(url=ENDPOINT, token=TOKEN)
 
-    client = WorkflowClient(url=ENDPOINT, token=TOKEN)
-
-    print("=== Workflow Templates ===")
-    templates = client.get_workflow_templates(limit=5, science_group="IMAGING")
-    for t in templates:
-        print(f"  {t['name']} — {t['title']} (maintainer: {t['maintainer']})")
-
-    print("\n=== Filtered Workflows ===")
-    workflows = client.get_workflows(
-        proposal_code="mg",
-        proposal_number=36964,
-        visit_number=1,
-        creator="gmg29649",
-        template="example-template",
-        succeeded=True,
-    )
-    for w in workflows:
-        print(f"  {w['name']} — status: {w['status']['__typename']}")
-
-    print("\n=== Single Workflow ===")
-    wf = client.get_workflow(
-        proposal_code="mg",
-        proposal_number=36964,
-        visit_number=1,
-        name="conditional-steps-tswxm",
-    )
-    print(f"  {wf['name']} | template: {wf['templateRef']} | status: {wf['status']['__typename']}")
-
-    print("\n=== Submit Workflow ===")
-    result = client.submit_workflow_from_template(
-        template_name="example-template",
-        proposal_code="mg",
-        proposal_number=36964,
-        visit_number=1,
-        parameters={"png": "True", "jpg": "False", "jpeg": "True", "tif": "True", "tiff": "False"},
-    )
-    print(f"  Created workflow: {result['name']}")
+    # print("=== Workflow Templates ===")
+    templates = client.get_workflow_templates(limit=5, science_group="CRYSTALLOGRAPHY")
+    # for t in templates:
+    #     print(f"  {t['name']} — {t['title']} (maintainer: {t['maintainer']})")

@@ -13,11 +13,9 @@ DEFAULT_DESTINATIONS = [
     "/topic/gda.messages.scan",
 ]
 
-DEFAULT_DII_UI_PLOT_DESTINATION = (
-    "/topic/public.data.plot"  # Currently prone to change as of 07/05/26
-)
-
-DEFAULT_DII_PROCESSED_DESTINATION = "/topic/public.data.processed"
+DEFAULT_DII_UI_PLOT_DESTINATION = "/topic/public.data.plot"
+DEFAULT_DII_PROCESSED_DESTINATION = "/topic/public.analysis.processed"
+DEFAULT_DII_ANALYSIS_TRIGGER_DESTINATION = "/topic/public.analysis.trigger"
 
 TIMEOUT = 1  # in seconds
 

@@ -1,0 +1,3 @@
+#!/bin/sh
+# shim that calls the xdg-open wrapper; some tools call `open` on mac-like systems
+exec "$(dirname "$0")/xdg-open" "$@"

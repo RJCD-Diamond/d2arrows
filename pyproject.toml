@@ -22,6 +22,7 @@ dependencies = [
     "httpx",
     "gitpython",
     "stomp.py",
+    "kubernetes",
 ] # Add project dependencies here, e.g. ["click", "numpy"]
 dynamic = ["version"]
 license.file = "LICENSE"
