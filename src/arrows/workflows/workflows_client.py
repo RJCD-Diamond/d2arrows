@@ -9,92 +9,95 @@ Usage:
 
     # Get filtered workflows for a visit
     workflows = client.get_workflows(
-        proposal_code="mg", proposal_number=36964, visit_number=1,
+        instrument_session="mg36964-1",
         creator="gmg29649", template="example-template", succeeded=True
     )
 
     # Get a specific workflow
     workflow = client.get_workflow(
-        proposal_code="mg", proposal_number=36964, visit_number=1,
+        instrument_session="mg36964-1",
         name="conditional-steps-tswxm"
     )
 
     # Submit a workflow from a template
     result = client.submit_workflow_from_template(
         template_name="example-template",
-        proposal_code="mg", proposal_number=36964, visit_number=1,
+        instrument_session="mg36964-1",
         parameters={"png": "True", "jpg": "False", "jpeg": "True", "tif": "True"}
     )
 """
 
-import json
-import urllib.error
-import urllib.request
 from typing import Any
 
+from arrows.core.graphql import BaseGraphqlClient
+from arrows.utils import split_instrument_session
 
-class GraphQLError(Exception):
-    """Raised when the GraphQL response contains errors."""
-
-    def __init__(self, errors: list[dict]):
-        self.errors = errors
-        messages = "; ".join(e.get("message", str(e)) for e in errors)
-        super().__init__(f"GraphQL error(s): {messages}")
+WORKFLOWS_ENDPOINT = "https://workflows.diamond.ac.uk/graphql"
 
 
-class WorkflowsClient:
-    def __init__(self, url: str, token: str | None = None, timeout: int = 30):
+class WorkflowsClient(BaseGraphqlClient):
+    def __init__(
+        self,
+        instrument_session: str,
+        science_group: str = "CRYSTALLOGRAPHY",
+        url: str | None = None,
+        timeout: int = 30,
+    ):
         """
         Args:
-            url:     Full GraphQL endpoint URL, e.g. "https://api.example.com/graphql"
-            token:   Optional Bearer token for Authorization header.
+            instrument_session eg: cm12345-1,
+            science_group eg: "CRYSTALLOGRAPHY",
             timeout: Request timeout in seconds.
         """
-        self.url = url
-        self.token = token
+
+        self.science_group = science_group.upper()
+
+        self.url = url or WORKFLOWS_ENDPOINT
         self.timeout = timeout
 
-    # ------------------------------------------------------------------
-    # Core transport
-    # ------------------------------------------------------------------
+        self.instrument_session = instrument_session
 
-    def _execute(self, query: str, variables: dict | None = None) -> dict:
-        """Send a GraphQL request and return the 'data' dict."""
-        payload = json.dumps({"query": query, "variables": variables or {}}).encode()
-
-        headers = {"Content-Type": "application/json", "Accept": "application/json"}
-        if self.token:
-            headers["Authorization"] = f"Bearer {self.token}"
-
-        req = urllib.request.Request(
-            self.url, data=payload, headers=headers, method="POST"
+        self.proposal_code, self.proposal_number, self.visit_number = (
+            split_instrument_session(instrument_session)
         )
 
-        try:
-            with urllib.request.urlopen(req, timeout=self.timeout) as resp:
-                body = json.loads(resp.read().decode())
-        except urllib.error.HTTPError as exc:
-            raise RuntimeError(f"HTTP {exc.code}: {exc.reason}") from exc
-        except urllib.error.URLError as exc:
-            raise RuntimeError(f"Network error: {exc.reason}") from exc
+        super().__init__(url=self.url, timeout=self.timeout)
 
-        print(body)  # Debug: print full response body
+    def set_instrument_session(self, instrument_session):
 
-        if errors := body.get("errors"):
-            raise GraphQLError(errors)
+        self.instrument_session = instrument_session
 
-        return body.get("data", {})
+        self.proposal_code, self.proposal_number, self.visit_number = (
+            split_instrument_session(instrument_session)
+        )
 
-    # ------------------------------------------------------------------
-    # Queries
-    # ------------------------------------------------------------------
+    def get_proposal_codes(self, instrument_session: str | None):
+        if instrument_session is not None:
+            proposal_code, proposal_number, visit_number = split_instrument_session(
+                instrument_session
+            )
+        else:
+            proposal_code, proposal_number, visit_number = (
+                self.proposal_code,
+                self.proposal_number,
+                self.visit_number,
+            )
+
+        return proposal_code, proposal_number, visit_number
+
+    def get_science_group(self, science_group: str | None) -> str:
+
+        return science_group or self.science_group
 
     def get_workflow_templates(
         self,
         limit: int = 5,
-        science_group: str | None = "CRYSTALLOGRAPHY",
+        science_group: str | None = None,
     ) -> list[dict]:
         """Return workflow template nodes, optionally filtered by science group."""
+
+        science_group = self.get_science_group(science_group)
+
         query = """
         query WorkflowTemplates($limit: Int, $scienceGroup: ScienceGroup) {
             workflowTemplates(limit: $limit, filter: {scienceGroup: $scienceGroup}) {
@@ -110,20 +113,23 @@ class WorkflowsClient:
         if science_group is not None:
             variables["scienceGroup"] = science_group
 
-        data = self._execute(query, variables)
+        data = self.execute_query(query, variables)
         return data["workflowTemplates"]["nodes"]
 
     def get_workflows(
         self,
-        proposal_code: str,
-        proposal_number: int,
-        visit_number: int,
+        instrument_session: str | None = None,
+        succeeded: bool = True,
         limit: int = 10,
         creator: str | None = None,
         template: str | None = None,
-        succeeded: bool | None = None,
     ) -> list[dict]:
         """Return workflow nodes for a given visit, with optional filters."""
+
+        proposal_code, proposal_number, visit_number = self.get_proposal_codes(
+            instrument_session
+        )
+
         query = """
         query Workflows(
             $proposalCode: String!
@@ -163,17 +169,20 @@ class WorkflowsClient:
             "template": template,
             "succeeded": succeeded,
         }
-        data = self._execute(query, variables)
+        data = self.execute_query(query, variables)
         return data["workflows"]["nodes"]
 
     def get_workflow(
         self,
-        proposal_code: str,
-        proposal_number: int,
-        visit_number: int,
         name: str,
+        instrument_session: str | None = None,
     ) -> dict:
         """Return details for a single named workflow."""
+
+        proposal_code, proposal_number, visit_number = self.get_proposal_codes(
+            instrument_session
+        )
+
         query = """
         query Workflow(
             $proposalCode: String!
@@ -203,7 +212,7 @@ class WorkflowsClient:
             "visitNumber": visit_number,
             "name": name,
         }
-        data = self._execute(query, variables)
+        data = self.execute_query(query, variables)
         return data["workflow"]
 
     # ------------------------------------------------------------------
@@ -213,10 +222,8 @@ class WorkflowsClient:
     def submit_workflow_from_template(
         self,
         template_name: str,
-        proposal_code: str,
-        proposal_number: int,
-        visit_number: int,
-        parameters: dict[str, str] | None = None,
+        instrument_session: str | None = None,
+        parameters: dict[str, Any] | None = None,
     ) -> dict:
         """
         Create a new workflow from an existing template.
@@ -232,6 +239,11 @@ class WorkflowsClient:
         Returns:
             Dict containing at minimum {"name": "<new-workflow-name>"}.
         """
+
+        proposal_code, proposal_number, visit_number = self.get_proposal_codes(
+            instrument_session
+        )
+
         mutation = """
         mutation SubmitWorkflowFromTemplate(
             $name: String!
@@ -253,6 +265,9 @@ class WorkflowsClient:
             }
         }
         """
+
+        # print(parameters)
+
         variables = {
             "name": template_name,
             "proposalCode": proposal_code,
@@ -260,7 +275,7 @@ class WorkflowsClient:
             "visitNumber": visit_number,
             "parameters": parameters or {},
         }
-        data = self._execute(mutation, variables)
+        data = self.execute_query(mutation, variables)
         return data["submitWorkflowTemplate"]
 
 
@@ -268,21 +283,21 @@ class WorkflowsClient:
 # Quick smoke-test (run directly: python graphql_client.py)
 # ------------------------------------------------------------------
 if __name__ == "__main__":
-    from arrows.auth.auth_client import AuthClient
+    client = WorkflowsClient("cm44163-3", science_group="CRYSTALLOGRAPHY")
 
-    client = AuthClient()
-    print("Getting token")
-    # client.list_reponse()
-    TOKEN = client.get_auth_token()
-    print("Token:", TOKEN)
+    # templates = client.get_workflow_templates()
+    # pprint(templates)
 
-    print("Token:", TOKEN)
+    # print(client.get_proposal_codes("cm44163-3"))
 
-    ENDPOINT = "https://workflows.diamond.ac.uk/graphql"
+    # workflows = client.get_workflows()
 
-    client = WorkflowsClient(url=ENDPOINT, token=TOKEN)
+    data = client.submit_workflow_from_template(
+        "i15-1-test-gaussian",
+        instrument_session="cm44163-3",
+        parameters={"centre": 5, "amplitude": 10},
+    )
 
-    # print("=== Workflow Templates ===")
-    templates = client.get_workflow_templates(limit=5, science_group="CRYSTALLOGRAPHY")
-    # for t in templates:
-    #     print(f"  {t['name']} — {t['title']} (maintainer: {t['maintainer']})")
+    print(data)
+
+    # pprint(workflows)
