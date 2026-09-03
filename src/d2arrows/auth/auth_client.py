@@ -4,6 +4,7 @@ import hashlib
 import json
 import os
 import urllib.parse
+import warnings
 import webbrowser
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
@@ -191,10 +192,10 @@ class TokenClient:
 
         # 1. Try the cache
         if use_cache and not force_refresh:
-            cached = self._load_cached_token()
-            if cached is not None and self._is_token_valid(cached):
+            cached_token = self._load_cached_token()
+            if cached_token is not None and self._is_token_valid(cached_token):
                 # print("Using cached token.")
-                token_data = cached
+                token_data = cached_token
 
         # 2. Fetch a fresh token
         if token_data is None:
@@ -313,8 +314,12 @@ class TokenClient:
 
         class CallbackHandler(BaseHTTPRequestHandler):
             def do_GET(self):
-                query = urllib.parse.urlparse(self.path).query
-                qs_params = urllib.parse.parse_qs(query)
+
+                with warnings.catch_warnings():
+                    warnings.filterwarnings("ignore", category=DeprecationWarning)
+                    query = urllib.parse.urlparse(self.path).query
+                    qs_params = urllib.parse.parse_qs(query)
+
                 if "code" in qs_params:
                     self.server.auth_code = qs_params["code"][0]  # type: ignore[attr-defined]
                     self.send_response(200)
@@ -397,7 +402,16 @@ def get_token(**kwargs) -> str:
     return _default_client.get_token(**kwargs)
 
 
+def get_json_header(**kwargs) -> str:
+    """Return a dict suitable for use as an HTTP Authorization header."""
+    token = _default_client.get_token(**kwargs)
+    dict_header = {"Authorization": f"Bearer {token}"}
+    json_header = json.dumps(dict_header)  # ensure serializable
+    return json_header
+
+
 if __name__ == "__main__":
-    _default_client.clear_cache()
+    # _default_client.clear_cache()
 
     print(get_token())
+    print(get_json_header())
