@@ -1,4 +1,4 @@
-"""Interface for ``python -m arrows``."""
+"""Interface for ``python -m d2arrows``."""
 
 from argparse import ArgumentParser
 from collections.abc import Sequence

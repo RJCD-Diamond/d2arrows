@@ -1,6 +1,5 @@
 import requests
-
-from arrows.auth.auth_client import TokenClient
+from d2arrows.auth.auth_client import TokenClient
 
 
 class GraphQLError(Exception):

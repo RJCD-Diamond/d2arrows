@@ -29,8 +29,8 @@ Usage:
 
 from typing import Any
 
-from arrows.core.graphql import BaseGraphqlClient
-from arrows.utils import split_instrument_session
+from d2arrows.core.graphql import BaseGraphqlClient
+from d2arrows.utils import split_instrument_session
 
 WORKFLOWS_ENDPOINT = "https://workflows.diamond.ac.uk/graphql"
 

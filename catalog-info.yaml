@@ -1,8 +1,8 @@
 apiVersion: backstage.io/v1alpha1
 kind: Component
 metadata:
-  name: arrows
-  title: arrows
+  name: d2arrows
+  title: d2arrows
   description: A package containing python clients for communicating with various DII systems
 spec:
   type: library

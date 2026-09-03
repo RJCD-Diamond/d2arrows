@@ -1,6 +1,5 @@
 import requests
-
-from arrows import logger
+from d2arrows import logger
 
 emojis = {
     "failure": ":x:",

@@ -3,7 +3,7 @@ requires = ["setuptools>=64", "setuptools_scm[toml]>=8"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "arrows"
+name = "d2arrows"
 classifiers = [
     "Development Status :: 3 - Alpha",
     "License :: OSI Approved :: Apache Software License",
@@ -17,13 +17,9 @@ dependencies = [
     "numpy",
     "scipy",
     "pydantic",
-    "pydantic_settings",
     "requests",
-    "httpx",
-    "gitpython",
     "stomp.py",
     "kubernetes",
-    "sgqlc",
 ] # Add project dependencies here, e.g. ["click", "numpy"]
 dynamic = ["version"]
 license.file = "LICENSE"
@@ -43,17 +39,17 @@ dev = [
 ]
 
 [project.scripts]
-arrows = "arrows.__main__:main"
+d2arrows = "d2arrows.__main__:main"
 
 [project.urls]
-GitHub = "https://github.com/DiamondLightSource/arrows"
+GitHub = "https://github.com/DiamondLightSource/d2arrows"
 
 [[project.authors]] # Further authors may be added by duplicating this section
 email = "richard.dixey@diamond.ac.uk"
 name = "Richard Dixey"
 
 [tool.setuptools_scm]
-version_file = "src/arrows/_version.py"
+version_file = "src/d2arrows/_version.py"
 
 [tool.pyright]
 typeCheckingMode = "standard"
@@ -71,7 +67,7 @@ testpaths = "docs src tests"
 
 [tool.coverage.run]
 patch = ["subprocess"]
-data_file = "/tmp/arrows.coverage"
+data_file = "/tmp/d2arrows.coverage"
 
 [tool.coverage.paths]
 # Tests are run from installed location, map back to the src directory
@@ -118,7 +114,7 @@ description = "Run tests with coverage"
 commands = [
     [
         "pytest",
-        "--cov=arrows",
+        "--cov=d2arrows",
         "--cov-report",
         "term",
         "--cov-report",

@@ -74,5 +74,5 @@ COPY --from=build /app/.venv /app/.venv
 ENV PATH=/app/.venv/bin:$PATH
 
 # change this entrypoint if it is not the same as the repo
-ENTRYPOINT ["arrows"]
+ENTRYPOINT ["d2arrows"]
 CMD ["--version"]

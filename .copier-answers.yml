@@ -8,14 +8,14 @@ component_owner: group:default/data-analysis
 component_type: library
 description: A package containing python clients for communicating with various DII
     systems
-distribution_name: arrows
+distribution_name: d2arrows
 docker: true
 docker_debug: false
 docs_type: README
 git_platform: github.com
 github_org: DiamondLightSource
-package_name: arrows
+package_name: d2arrows
 pypi: true
-repo_name: arrows
+repo_name: d2arrows
 strict_typing: false
 type_checker: pyright
