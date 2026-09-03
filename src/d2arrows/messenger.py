@@ -49,6 +49,8 @@ class ScanListener(stomp.ConnectionListener):
 
 
 class Messenger:
+    """This is a heavily modified version of the DaqMessenger class"""
+
     def __init__(
         self,
         beamline: str | None = None,
@@ -225,8 +227,13 @@ class Messenger:
         copy2(filepath_out, magic_path)  # copies to ispyb
 
 
-# if __name__ == "__main__":
-#     client = Messenger("i15-1", broker="rabbitmq", username="guest", password="guest")
+I15_1_MESSENGER = Messenger(
+    beamline="i15-1", broker="rabbitmq", username="guest", password="guest"
+)
+
+if __name__ == "__main__":
+    I15_1_MESSENGER.listen()
+
 
 #     print("djsdnsj")
 
