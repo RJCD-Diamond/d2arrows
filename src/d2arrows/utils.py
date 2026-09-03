@@ -22,5 +22,5 @@ def split_instrument_session(instrument_session: str) -> tuple[str, int, int]:
             f"Invalid format: {instrument_session!r} - must be like: cm12345-1"
         )
 
-    prosal_code, proposal_number, visit_number = match.groups()
-    return prosal_code, int(proposal_number), int(visit_number)
+    proposal_code, proposal_number, visit_number = match.groups()
+    return proposal_code, int(proposal_number), int(visit_number)
