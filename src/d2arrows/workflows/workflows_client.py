@@ -351,7 +351,7 @@ class WorkflowsClient(BaseGraphqlClient):
 
 
 if __name__ == "__main__":
-    client = WorkflowsClient("cm44163-3", science_group="CRYSTALLOGRAPHY")
+    client = WorkflowsClient("cm44163-4", science_group="CRYSTALLOGRAPHY")
 
     # templates = client.get_workflow_templates()
     # pprint(templates)
