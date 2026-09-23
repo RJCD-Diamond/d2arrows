@@ -3,7 +3,7 @@
 from argparse import ArgumentParser
 from collections.abc import Sequence
 
-from . import __version__
+from d2arrows._version import __version__
 
 __all__ = ["main"]
 

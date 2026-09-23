@@ -172,6 +172,76 @@ class WorkflowsClient(BaseGraphqlClient):
         data = self.execute_query(query, variables)
         return data["workflows"]["nodes"]
 
+    def create_trigger(self, trigger_template: str) -> dict:
+        """Create a trigger from a trigger template for a visit."""
+
+        query = """
+        mutation maketrigger($templateRef: String!) {
+        createTrigger(templateRef: $templateRef) {
+            name
+        }
+        }
+        """
+        data = self.execute_query(query, {"templateRef": trigger_template})
+        return data["createTrigger"]
+
+    def disable_trigger(self, name: str) -> dict:
+        """Disable a trigger by name."""
+
+        query = """
+        mutation disableTrigger($name: String!) {
+        disableTrigger(name: $name) {
+            name
+        }
+        }
+        """
+        data = self.execute_query(query, {"name": name})
+        return data["disableTrigger"]
+
+    def enable_trigger(self, name: str) -> dict:
+        """enable a trigger by name."""
+
+        query = """
+        mutation enableTrigger($name: String!) {
+        enableTrigger(name: $name) {
+            name
+        }
+        }
+        """
+        data = self.execute_query(query, {"name": name})
+        return data["enableTrigger"]
+
+    def delete_trigger(self, name: str) -> dict:
+        """delete a trigger by name."""
+
+        query = """
+        mutation deleteTrigger($name: String!) {
+        deleteTrigger(name: $name) {
+            name
+        }
+        }
+        """
+        data = self.execute_query(query, {"name": name})
+        return data["deleteTrigger"]
+
+    def get_triggers(self, limit: int = 10) -> list[dict]:
+        """Return trigger nodes, including whether each is enabled."""
+
+        query = """
+        query Triggers($limit: Int) {
+        triggers(limit: $limit) {
+            nodes {
+                name
+                templateRef
+                beamline
+                enabled
+            }
+        }
+        }
+        """
+        data = self.execute_query(query, {"limit": limit})
+        return data["triggers"]["nodes"]
+
     def get_workflow(
         self,
         name: str,
@@ -224,7 +294,7 @@ class WorkflowsClient(BaseGraphqlClient):
         template_name: str,
         instrument_session: str | None = None,
         parameters: dict[str, Any] | None = None,
-    ) -> dict:
+    ) -> str:
         """
         Create a new workflow from an existing template.
 
@@ -276,12 +346,10 @@ class WorkflowsClient(BaseGraphqlClient):
             "parameters": parameters or {},
         }
         data = self.execute_query(mutation, variables)
-        return data["submitWorkflowTemplate"]
+        workflow_name = data["submitWorkflowTemplate"]["name"]
+        return workflow_name
 
 
-# ------------------------------------------------------------------
-# Quick smoke-test (run directly: python graphql_client.py)
-# ------------------------------------------------------------------
 if __name__ == "__main__":
     client = WorkflowsClient("cm44163-3", science_group="CRYSTALLOGRAPHY")
 
@@ -290,14 +358,63 @@ if __name__ == "__main__":
 
     # print(client.get_proposal_codes("cm44163-3"))
 
+    # trigger_name = client.create_trigger(
+    #     trigger_template="i15-1-eiger-reduction-trigger", instrument_session="cm44163-4" #noqa
+    # )
+
+    print(client.get_triggers())
+
+    # client.delete_trigger("i15-1-eiger-reduction-trigger-zdnsb")
+
     # workflows = client.get_workflows()
 
-    data = client.submit_workflow_from_template(
-        "i15-1-test-gaussian",
-        instrument_session="cm44163-3",
-        parameters={"centre": 5, "amplitude": 10},
-    )
+    # import time
 
-    print(data)
+    # import numpy as np
 
-    # pprint(workflows)
+    # def time_workflows():
+
+    #     start_time = time.time()
+
+    #     submitted_workflow_name = client.submit_workflow_from_template(
+    #         "i15-1-test-gaussian",
+    #         instrument_session="cm44163-3",
+    #         parameters={"centre": 5, "amplitude": 10},
+    #     )
+
+    #     print(submitted_workflow_name)
+
+    #     complete = False
+
+    #     while not complete:
+    #         workflows = client.get_workflows(
+    #             instrument_session="cm44163-3", succeeded=True
+    #         )
+    #         workflow_names = [workflow["name"] for workflow in workflows]
+    #         matched = [f for f in workflow_names if f == submitted_workflow_name]
+
+    #         if len(matched) > 0:
+    #             complete = True
+
+    #         time.sleep(1)
+
+    #     duration = time.time() - start_time
+    #     return duration
+
+    # iterations = 20
+
+    # durations = []
+
+    # for iter in range(iterations):
+    #     duration = time_workflows()
+    #     durations.append(duration)
+    #     print(iter, duration)
+
+    # print(
+    #     "mean",
+    #     np.mean(durations),
+    #     "stddev",
+    #     np.std(durations),
+    #     "min",
+    #     np.amin(durations),
+    # )

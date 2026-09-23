@@ -8,7 +8,7 @@
 
 import logging
 
-from ._version import __version__
+from d2arrows._version import __version__
 
 __all__ = ["__version__"]
 
