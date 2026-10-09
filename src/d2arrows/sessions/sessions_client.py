@@ -9,9 +9,14 @@ Usage:
 
     # Only sessions currently running
     sessions = client.get_instrument_sessions(instrument="i15-1", state="IN_PROGRESS")
+
+    # Sessions in any of several states
+    sessions = client.get_instrument_sessions(
+        instrument="i15-1", state=["IN_PROGRESS", "FUTURE"]
+    )
 """
 
-from typing import Any
+from typing import Any, Literal, get_args
 
 from d2arrows.core.graphql import BaseGraphqlClient
 
@@ -20,7 +25,8 @@ GRAPH_ENDPOINT = "https://graph.diamond.ac.uk/graphql"
 # The instrument_sessions subgraph rejects page sizes above this
 MAX_PAGE_SIZE = 50
 
-SESSION_STATES = ("FUTURE", "IN_PROGRESS", "COMPLETED", "CANCELLED")
+SessionState = Literal["FUTURE", "IN_PROGRESS", "COMPLETED", "CANCELLED"]
+SESSION_STATES: tuple[SessionState, ...] = get_args(SessionState)
 
 
 class SessionsClient(BaseGraphqlClient):
@@ -36,7 +42,7 @@ class SessionsClient(BaseGraphqlClient):
     def get_instrument_sessions(
         self,
         instrument: str | None = None,
-        state: str | None = None,
+        state: SessionState | list[SessionState] | None = None,
         limit: int | None = None,
     ) -> list[str]:
         """
@@ -45,18 +51,44 @@ class SessionsClient(BaseGraphqlClient):
         Args:
             instrument: Beamline name eg "i15-1". Without this, every visible
                         session across the facility is fetched, which is slow.
-            state:      One of FUTURE, IN_PROGRESS, COMPLETED, CANCELLED.
+            state:      One or a list of FUTURE, IN_PROGRESS, COMPLETED,
+                        CANCELLED. None returns sessions in any state.
             limit:      Max number of sessions to return, or None for all.
 
         Returns:
             Session references eg ["nr47394-1", "cm44163-4"].
         """
 
+        if state is None:
+            sessions = self._fetch_sessions(instrument, None, limit)
+        else:
+            states: list[SessionState] = [state] if isinstance(state, str) else state
+            for session_state in states:
+                if session_state not in SESSION_STATES:
+                    raise ValueError(f"state must be one of {SESSION_STATES}")
+
+            # The API only filters on a single state, so query each one and
+            # merge, keeping the newest-first order across all of them
+            sessions = []
+            for session_state in dict.fromkeys(states):
+                sessions.extend(self._fetch_sessions(instrument, session_state, limit))
+            sessions.sort(key=lambda session: session[0] or "", reverse=True)
+
+        if limit is not None:
+            sessions = sessions[:limit]
+
+        return [reference for _, reference in sessions]
+
+    def _fetch_sessions(
+        self,
+        instrument: str | None,
+        state: SessionState | None,
+        limit: int | None,
+    ) -> list[tuple[str | None, str]]:
+        """Page through sessions, returning (startTime, reference) pairs."""
+
         filter_by: dict[str, Any] = {}
         if state is not None:
-            state = state.upper()
-            if state not in SESSION_STATES:
-                raise ValueError(f"state must be one of {SESSION_STATES}")
             filter_by["state"] = {"eq": state}
 
         connection_args = """
@@ -66,7 +98,7 @@ class SessionsClient(BaseGraphqlClient):
             sortBy: [{field: startTime, orderBy: DESC}]
         """
         connection_fields = """
-            edges { node { instrumentSessionReference } }
+            edges { node { instrumentSessionReference startTime } }
             pageInfo { hasNextPage endCursor }
         """
 
@@ -99,7 +131,7 @@ class SessionsClient(BaseGraphqlClient):
             # Instrument names are stored upper case, eg "I15-1"
             variables["name"] = instrument.upper()
 
-        sessions: list[str] = []
+        sessions: list[tuple[str | None, str]] = []
         after = None
 
         while limit is None or len(sessions) < limit:
@@ -118,7 +150,10 @@ class SessionsClient(BaseGraphqlClient):
                 connection = data["instrumentSessions"]
 
             sessions.extend(
-                edge["node"]["instrumentSessionReference"].lower()
+                (
+                    edge["node"]["startTime"],
+                    edge["node"]["instrumentSessionReference"].lower(),
+                )
                 for edge in connection["edges"]
             )
 
