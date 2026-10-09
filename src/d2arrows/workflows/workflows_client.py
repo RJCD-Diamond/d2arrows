@@ -172,6 +172,36 @@ class WorkflowsClient(BaseGraphqlClient):
         data = self.execute_query(query, variables)
         return data["workflows"]["nodes"]
 
+    def create_trigger_for_visit(
+        self, trigger_template: str, instrument_session: str | None = None
+    ) -> dict:
+        """Create a trigger from a trigger template for a specific visit."""
+
+        proposal_code, proposal_number, visit_number = self.get_proposal_codes(
+            instrument_session
+        )
+
+        query = """
+        mutation createTrigger{
+        createTrigger(templateRef: $templateRef, visit: {
+            proposalCode: $proposalCode,
+            proposalNumber: $proposalNumber,
+            number: $visitNumber
+        }) {
+            name
+        }
+        }
+        """
+
+        variables = {
+            "templateRef": trigger_template,
+            "proposalCode": proposal_code,
+            "proposalNumber": proposal_number,
+            "visitNumber": visit_number,
+        }
+        data = self.execute_query(query, variables)
+        return data["createTrigger"]
+
     def create_trigger(self, trigger_template: str) -> dict:
         """Create a trigger from a trigger template for a visit."""
 
@@ -359,12 +389,14 @@ if __name__ == "__main__":
     # print(client.get_proposal_codes("cm44163-3"))
 
     # trigger_name = client.create_trigger(
-    #     trigger_template="i15-1-eiger-reduction-trigger", instrument_session="cm44163-4" #noqa
+    #     trigger_template="i15-1-eiger-reduction-trigger",
     # )
 
-    print(client.get_triggers())
+    # print(client.get_triggers())
 
-    # client.delete_trigger("i15-1-eiger-reduction-trigger-zdnsb")
+    # client.delete_trigger("i15-1-eiger-reduction-trigger-fnz8r")
+
+    client.disable_trigger("i15-1-eiger-reduction-trigger-fnz8r")
 
     # workflows = client.get_workflows()
 

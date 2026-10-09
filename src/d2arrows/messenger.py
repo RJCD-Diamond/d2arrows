@@ -232,8 +232,20 @@ I15_1_MESSENGER = Messenger(
 )
 
 if __name__ == "__main__":
-    I15_1_MESSENGER.listen()
+    # I15_1_MESSENGER.listen()
 
+    dest = [
+        "/topic/gda.messages.processing",
+        "/topic/gda.messages.scan",
+    ]
+
+    imessenger = Messenger(
+        host="i11-control:8161",
+        password="guest",
+        destinations=dest,
+    )
+
+    imessenger.listen(max_iter=999999)
 
 #     print("djsdnsj")
 
