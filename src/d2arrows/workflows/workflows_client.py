@@ -490,7 +490,11 @@ def batch_process(
             print(f"Workflow submission failed for filenumber {filenumber}: {e}")
 
 
-def benchmark_workflows():
+def benchmark_workflows(
+    workflows_template: str = "i15-1-test-gaussian",
+    parameters: dict[str, Any] = {"centre": 5, "amplitude": 10},  # noqa
+    instrument_session: str = "cm44163-3",
+) -> list[float]:
 
     import time
 
@@ -503,9 +507,9 @@ def benchmark_workflows():
         start_time = time.time()
 
         submitted_workflow_name = client.submit_workflow_from_template(
-            "i15-1-test-gaussian",
-            instrument_session="cm44163-3",
-            parameters={"centre": 5, "amplitude": 10},
+            workflows_template,
+            instrument_session=instrument_session,
+            parameters=parameters,
             wait_for_completion=True,
         )
 
@@ -529,14 +533,16 @@ def benchmark_workflows():
         f"min {np.amin(durations):.2f}"
     )
 
+    return durations
+
 
 if __name__ == "__main__":
     client = WorkflowsClient("cm44163-4", science_group="CRYSTALLOGRAPHY")
 
-    benchmark_workflows()
+    # benchmark_workflows()
 
     # templates = client.get_workflow_templates()
-    # pprint(templates)
+    # print(templates)
 
     # print(client.get_proposal_codes("cm44163-3"))
 
