@@ -496,6 +496,8 @@ def benchmark_workflows():
 
     import numpy as np
 
+    print("Benchmarking workflows...")
+
     def time_workflows():
 
         start_time = time.time()
@@ -522,12 +524,9 @@ def benchmark_workflows():
         print(iter, duration)
 
     print(
-        "mean",
-        np.mean(durations),
-        "stddev",
-        np.std(durations),
-        "min",
-        np.amin(durations),
+        f"mean {np.mean(durations):.2f} "
+        f"stddev {np.std(durations):.2f} "
+        f"min {np.amin(durations):.2f}"
     )
 
 
