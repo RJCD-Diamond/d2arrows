@@ -27,12 +27,17 @@ Usage:
     )
 """
 
+import time
 from typing import Any
 
 from d2arrows.core.graphql import BaseGraphqlClient
 from d2arrows.utils import split_instrument_session
 
 WORKFLOWS_ENDPOINT = "https://workflows.diamond.ac.uk/graphql"
+
+
+class WorkflowFailedError(Exception):
+    """Raised when a waited-on workflow ends in a failed or errored state."""
 
 
 class WorkflowsClient(BaseGraphqlClient):
@@ -84,6 +89,18 @@ class WorkflowsClient(BaseGraphqlClient):
             )
 
         return proposal_code, proposal_number, visit_number
+
+    def get_visit_input(self, instrument_session: str | None) -> dict:
+        """Build a VisitInput; triggers are namespaced per visit."""
+
+        proposal_code, proposal_number, visit_number = self.get_proposal_codes(
+            instrument_session
+        )
+        return {
+            "proposalCode": proposal_code,
+            "proposalNumber": proposal_number,
+            "number": visit_number,
+        }
 
     def get_science_group(self, science_group: str | None) -> str:
 
@@ -177,17 +194,9 @@ class WorkflowsClient(BaseGraphqlClient):
     ) -> dict:
         """Create a trigger from a trigger template for a specific visit."""
 
-        proposal_code, proposal_number, visit_number = self.get_proposal_codes(
-            instrument_session
-        )
-
         query = """
-        mutation createTrigger{
-        createTrigger(templateRef: $templateRef, visit: {
-            proposalCode: $proposalCode,
-            proposalNumber: $proposalNumber,
-            number: $visitNumber
-        }) {
+        mutation createTrigger($templateRef: String!, $visit: VisitInput) {
+        createTrigger(templateRef: $templateRef, visit: $visit) {
             name
         }
         }
@@ -195,9 +204,7 @@ class WorkflowsClient(BaseGraphqlClient):
 
         variables = {
             "templateRef": trigger_template,
-            "proposalCode": proposal_code,
-            "proposalNumber": proposal_number,
-            "visitNumber": visit_number,
+            "visit": self.get_visit_input(instrument_session),
         }
         data = self.execute_query(query, variables)
         return data["createTrigger"]
@@ -215,43 +222,46 @@ class WorkflowsClient(BaseGraphqlClient):
         data = self.execute_query(query, {"templateRef": trigger_template})
         return data["createTrigger"]
 
-    def disable_trigger(self, name: str) -> dict:
+    def disable_trigger(self, name: str, instrument_session: str | None = None) -> dict:
         """Disable a trigger by name."""
 
         query = """
-        mutation disableTrigger($name: String!) {
-        disableTrigger(name: $name) {
+        mutation disableTrigger($name: String!, $visit: VisitInput) {
+        disableTrigger(name: $name, visit: $visit) {
             name
         }
         }
         """
-        data = self.execute_query(query, {"name": name})
+        variables = {"name": name, "visit": self.get_visit_input(instrument_session)}
+        data = self.execute_query(query, variables)
         return data["disableTrigger"]
 
-    def enable_trigger(self, name: str) -> dict:
+    def enable_trigger(self, name: str, instrument_session: str | None = None) -> dict:
         """enable a trigger by name."""
 
         query = """
-        mutation enableTrigger($name: String!) {
-        enableTrigger(name: $name) {
+        mutation enableTrigger($name: String!, $visit: VisitInput) {
+        enableTrigger(name: $name, visit: $visit) {
             name
         }
         }
         """
-        data = self.execute_query(query, {"name": name})
+        variables = {"name": name, "visit": self.get_visit_input(instrument_session)}
+        data = self.execute_query(query, variables)
         return data["enableTrigger"]
 
-    def delete_trigger(self, name: str) -> dict:
+    def delete_trigger(self, name: str, instrument_session: str | None = None) -> dict:
         """delete a trigger by name."""
 
         query = """
-        mutation deleteTrigger($name: String!) {
-        deleteTrigger(name: $name) {
+        mutation deleteTrigger($name: String!, $visit: VisitInput) {
+        deleteTrigger(name: $name, visit: $visit) {
             name
         }
         }
         """
-        data = self.execute_query(query, {"name": name})
+        variables = {"name": name, "visit": self.get_visit_input(instrument_session)}
+        data = self.execute_query(query, variables)
         return data["deleteTrigger"]
 
     def get_triggers(self, limit: int = 10) -> list[dict]:
@@ -324,6 +334,9 @@ class WorkflowsClient(BaseGraphqlClient):
         template_name: str,
         instrument_session: str | None = None,
         parameters: dict[str, Any] | None = None,
+        wait_for_completion: bool = False,
+        poll_interval: float = 1.0,
+        wait_timeout: float | None = None,
     ) -> str:
         """
         Create a new workflow from an existing template.
@@ -335,9 +348,16 @@ class WorkflowsClient(BaseGraphqlClient):
             visit_number:    e.g. 1
             parameters:      Key/value pairs forwarded to the template,
                              e.g. {"png": "True", "jpg": "False"}.
+            wait_for_completion: If True, block until the workflow succeeds.
+            poll_interval:   Seconds between status checks while waiting.
+            wait_timeout:    Max seconds to wait, or None to wait indefinitely.
 
         Returns:
-            Dict containing at minimum {"name": "<new-workflow-name>"}.
+            The name of the new workflow.
+
+        Raises:
+            WorkflowFailedError: If waiting and the workflow fails or errors.
+            TimeoutError: If waiting and wait_timeout is exceeded.
         """
 
         proposal_code, proposal_number, visit_number = self.get_proposal_codes(
@@ -377,11 +397,144 @@ class WorkflowsClient(BaseGraphqlClient):
         }
         data = self.execute_query(mutation, variables)
         workflow_name = data["submitWorkflowTemplate"]["name"]
+
+        if wait_for_completion:
+            self.wait_for_workflow(
+                workflow_name,
+                instrument_session=instrument_session,
+                poll_interval=poll_interval,
+                timeout=wait_timeout,
+            )
+
         return workflow_name
+
+    def get_workflow_status(
+        self, name: str, instrument_session: str | None = None
+    ) -> dict | None:
+        """Return a workflow status, eg {"__typename": "WorkflowRunningStatus"}."""
+
+        query = """
+        query WorkflowStatus($visit: VisitInput!, $name: String!) {
+            workflow(visit: $visit, name: $name) {
+                status {
+                    __typename
+                    ... on WorkflowFailedStatus { message tasks { name message } }
+                    ... on WorkflowErroredStatus { message tasks { name message } }
+                }
+            }
+        }
+        """
+        variables = {"visit": self.get_visit_input(instrument_session), "name": name}
+        data = self.execute_query(query, variables)
+        return data["workflow"]["status"]
+
+    def wait_for_workflow(
+        self,
+        name: str,
+        instrument_session: str | None = None,
+        poll_interval: float = 1.0,
+        timeout: float | None = None,
+    ) -> None:
+        """Block until a workflow succeeds; raise if it fails, errors or times out."""
+
+        start_time = time.monotonic()
+
+        while True:
+            status = self.get_workflow_status(name, instrument_session) or {}
+            typename = status.get("__typename")
+
+            if typename == "WorkflowSucceededStatus":
+                return
+            if typename in ("WorkflowFailedStatus", "WorkflowErroredStatus"):
+                messages = [status.get("message")] + [
+                    f"{task['name']}: {task['message']}"
+                    for task in status.get("tasks", [])
+                    if task.get("message")
+                ]
+                details = "; ".join(m for m in messages if m)
+                raise WorkflowFailedError(
+                    f"Workflow {name} ended with {typename}: {details}"
+                )
+            if timeout is not None and time.monotonic() - start_time > timeout:
+                raise TimeoutError(
+                    f"Workflow {name} did not complete within {timeout}s"
+                )
+
+            time.sleep(poll_interval)
+
+
+def batch_process(
+    instrument_session: str,
+    filenumber_range: tuple[int, int],
+    science_group: str = "CRYSTALLOGRAPHY",
+) -> None:
+    """Batch process a range of filenumbers using the workflows client."""
+
+    client = WorkflowsClient("cm44163-4", science_group=science_group)
+
+    for filenumber in range(*filenumber_range):
+        print(filenumber)
+
+        try:
+            client.submit_workflow_from_template(
+                template_name="i15-1-eiger-analysis",
+                instrument_session=instrument_session,
+                parameters={
+                    "filenumber": filenumber,
+                    "visitdir": f"/dls/i15-1/data/2026/{instrument_session}",
+                },
+                wait_for_completion=True,
+                poll_interval=1.0,
+            )
+        except Exception as e:
+            print(f"Workflow submission failed for filenumber {filenumber}: {e}")
+
+
+def benchmark_workflows():
+
+    import time
+
+    import numpy as np
+
+    def time_workflows():
+
+        start_time = time.time()
+
+        submitted_workflow_name = client.submit_workflow_from_template(
+            "i15-1-test-gaussian",
+            instrument_session="cm44163-3",
+            parameters={"centre": 5, "amplitude": 10},
+            wait_for_completion=True,
+        )
+
+        print(submitted_workflow_name)
+
+        duration = time.time() - start_time
+        return duration
+
+    iterations = 20
+
+    durations = []
+
+    for iter in range(iterations):
+        duration = time_workflows()
+        durations.append(duration)
+        print(iter, duration)
+
+    print(
+        "mean",
+        np.mean(durations),
+        "stddev",
+        np.std(durations),
+        "min",
+        np.amin(durations),
+    )
 
 
 if __name__ == "__main__":
     client = WorkflowsClient("cm44163-4", science_group="CRYSTALLOGRAPHY")
+
+    benchmark_workflows()
 
     # templates = client.get_workflow_templates()
     # pprint(templates)
@@ -396,57 +549,6 @@ if __name__ == "__main__":
 
     # client.delete_trigger("i15-1-eiger-reduction-trigger-fnz8r")
 
-    client.disable_trigger("i15-1-eiger-reduction-trigger-fnz8r")
+    # client.disable_trigger("i15-1-eiger-reduction-trigger-fnz8r")
 
     # workflows = client.get_workflows()
-
-    # import time
-
-    # import numpy as np
-
-    # def time_workflows():
-
-    #     start_time = time.time()
-
-    #     submitted_workflow_name = client.submit_workflow_from_template(
-    #         "i15-1-test-gaussian",
-    #         instrument_session="cm44163-3",
-    #         parameters={"centre": 5, "amplitude": 10},
-    #     )
-
-    #     print(submitted_workflow_name)
-
-    #     complete = False
-
-    #     while not complete:
-    #         workflows = client.get_workflows(
-    #             instrument_session="cm44163-3", succeeded=True
-    #         )
-    #         workflow_names = [workflow["name"] for workflow in workflows]
-    #         matched = [f for f in workflow_names if f == submitted_workflow_name]
-
-    #         if len(matched) > 0:
-    #             complete = True
-
-    #         time.sleep(1)
-
-    #     duration = time.time() - start_time
-    #     return duration
-
-    # iterations = 20
-
-    # durations = []
-
-    # for iter in range(iterations):
-    #     duration = time_workflows()
-    #     durations.append(duration)
-    #     print(iter, duration)
-
-    # print(
-    #     "mean",
-    #     np.mean(durations),
-    #     "stddev",
-    #     np.std(durations),
-    #     "min",
-    #     np.amin(durations),
-    # )
