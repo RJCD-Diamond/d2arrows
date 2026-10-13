@@ -544,6 +544,12 @@ if __name__ == "__main__":
     # templates = client.get_workflow_templates()
     # print(templates)
 
+    client.submit_workflow_from_template(
+        template_name="i15-1-eiger-reduction-trigger",
+        instrument_session="cm44163-4",
+        parameters={},
+    )
+
     # print(client.get_proposal_codes("cm44163-3"))
 
     # trigger_name = client.create_trigger(
