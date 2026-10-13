@@ -1,4 +1,5 @@
 import time
+from copy import deepcopy
 from pprint import pprint
 from typing import Any
 from urllib.parse import urlparse
@@ -12,7 +13,7 @@ from tiled.queries import Comparison, Eq
 TILED_URL = "https://tiled.diamond.ac.uk"
 
 
-tiled.client.utils.TILED_RETRY_ATTEMPTS = 2
+tiled.client.utils.TILED_RETRY_ATTEMPTS = 1
 
 
 TILED_STALE_TIME = 60 * 60 * 24  # 1 day in seconds
@@ -106,7 +107,10 @@ def container_to_dict(container: Container, read_data: bool = True) -> dict[str,
         Dict mirroring the container's structure, eg
         {"primary": {"fastcs_eiger": "/dls/.../i15-1-100225-fastcs_eiger_000001.h5",
                      "i0": "/dls/.../i15-1-100225-i0.h5"},
-         "baseline": {"seq_num": array([1, 2]), ...}}.
+         "baseline": {"seq_num": array([1, 2]), ...},
+         "start": {"scan_id": 100225, "sample_info": {...}, ...}}
+
+        A run's start document is included under "start", alongside its streams.
     """
 
     container_dict: dict[str, Any] = {}
@@ -121,6 +125,10 @@ def container_to_dict(container: Container, read_data: bool = True) -> dict[str,
                 container_dict[key] = container_to_dict(node, read_data=read_data)
             except Exception:
                 container_dict[key] = {}
+
+            # A run's start document: sample, experiment definition, etc.
+            if "start" in node.metadata:
+                container_dict[key]["start"] = deepcopy(node.metadata["start"])
         elif read_data and (file_path := get_file_path(node.item)):
             container_dict[key] = file_path
         elif read_data:
@@ -181,12 +189,11 @@ if __name__ == "__main__":
     #     tiled_client.get_last_results_container(instrument_session="cm44163-4")
     # )
 
-    scan_meatadata_container = tiled_client.get_scan_file_container(
-        instrument_session="cm44163-4", scan_number=100262, as_dict=True
-    )
-
-    pprint(scan_meatadata_container)
+    # scan_meatadata_container = tiled_client.get_scan_file_container(
+    #     instrument_session="cm44163-4", scan_number=100262, as_dict=True
+    # )
 
     scan_meatadata_container = tiled_client.get_scan_file_container(
         instrument_session="cm44163-4", scan_number=100260, as_dict=True
     )
+    pprint(scan_meatadata_container)
