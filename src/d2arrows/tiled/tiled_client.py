@@ -151,7 +151,10 @@ class TiledClient:
         self.oldest_valid_time = time.time() - TILED_STALE_TIME
 
     def get_last_results_container(
-        self, instrument_session: str, oldest_time: str | None = None
+        self,
+        instrument_session: str,
+        oldest_time: str | None = None,
+        exit_status: str = "success",
     ) -> Container:
 
         oldest_valid_time = oldest_time or self.oldest_valid_time
@@ -159,15 +162,25 @@ class TiledClient:
         results_container = (
             self.client.search(Eq("start.instrument", self.beamline))
             .search(Eq("start.instrument_session", instrument_session))
-            .search(Eq("stop.exit_status", "success"))
+            .search(Eq("stop.exit_status", exit_status))
             .search(Comparison("ge", "stop.time", oldest_valid_time))
         )
 
         return results_container
 
-    def get_scan_file_container(
+    def get_run_container(
         self, instrument_session: str, scan_number: int, as_dict: bool = True
-    ) -> Container | dict:
+    ) -> tuple[str, Container | dict]:
+        """
+        Find a scan's run in tiled.
+
+        Returns:
+            (uid, run): the run's uuid, and the run as a dict from
+            container_to_dict, or as a tiled Container if as_dict is False.
+
+        Raises:
+            ValueError: If no run, or more than one, matches the scan number.
+        """
 
         results_container = (
             self.client.search(Eq("start.instrument", self.beamline))
@@ -175,11 +188,18 @@ class TiledClient:
             .search(Eq("start.scan_id", scan_number))
         )
 
+        if len(results_container) != 1:
+            raise ValueError(
+                f"Expected 1 run for scan {scan_number} in {instrument_session}, "
+                f"found {len(results_container)}"
+            )
+
+        uid = next(iter(results_container))
+
         if as_dict:
-            results_dict = container_to_dict(results_container)
-            return results_dict
+            return uid, container_to_dict(results_container)[uid]
         else:
-            return results_container
+            return uid, results_container[uid]
 
 
 if __name__ == "__main__":
@@ -189,11 +209,24 @@ if __name__ == "__main__":
     #     tiled_client.get_last_results_container(instrument_session="cm44163-4")
     # )
 
-    # scan_meatadata_container = tiled_client.get_scan_file_container(
-    #     instrument_session="cm44163-4", scan_number=100262, as_dict=True
-    # )
-
-    scan_meatadata_container = tiled_client.get_scan_file_container(
-        instrument_session="cm44163-4", scan_number=100260, as_dict=True
+    scan_uid, scan_meatadata_container = tiled_client.get_run_container(
+        instrument_session="cm44163-4", scan_number=100262, as_dict=True
     )
+
+    # scan_uid, scan_meatadata_container = tiled_client.get_run_container(
+    #     instrument_session="cm44163-4", scan_number=100260, as_dict=True
+    # )
     pprint(scan_meatadata_container)
+
+    # Paths only reach nodes (streams, arrays); scan_id is metadata on the run
+    scan_client = from_uri(
+        f"{TILED_URL}/api/v1/metadata/{scan_uid}", include_data_sources=True
+    )
+
+    print(scan_client.metadata["start"]["scan_id"])
+    print(scan_client.metadata["stop"])
+    print(scan_client.metadata["start"])
+
+    print(scan_client["baseline"])
+    print(scan_client["primary"])
+    print(scan_client["data"])
