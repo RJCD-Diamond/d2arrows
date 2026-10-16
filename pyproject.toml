@@ -21,6 +21,8 @@ dependencies = [
     "stomp.py",
     "kubernetes",
     "tiled[client]>=0.2.9",
+    "event_model",
+    "h5py>=3.16.0",
 ] # Add project dependencies here, e.g. ["click", "numpy"]
 dynamic = ["version"]
 license.file = "LICENSE"

@@ -222,46 +222,43 @@ class WorkflowsClient(BaseGraphqlClient):
         data = self.execute_query(query, {"templateRef": trigger_template})
         return data["createTrigger"]
 
-    def disable_trigger(self, name: str, instrument_session: str | None = None) -> dict:
+    def disable_trigger(self, name: str) -> dict:
         """Disable a trigger by name."""
 
         query = """
-        mutation disableTrigger($name: String!, $visit: VisitInput) {
-        disableTrigger(name: $name, visit: $visit) {
+        mutation disableTrigger($name: String!) {
+        disableTrigger(name: $name) {
             name
         }
         }
         """
-        variables = {"name": name, "visit": self.get_visit_input(instrument_session)}
-        data = self.execute_query(query, variables)
+        data = self.execute_query(query, {"name": name})
         return data["disableTrigger"]
 
-    def enable_trigger(self, name: str, instrument_session: str | None = None) -> dict:
+    def enable_trigger(self, name: str) -> dict:
         """enable a trigger by name."""
 
         query = """
-        mutation enableTrigger($name: String!, $visit: VisitInput) {
-        enableTrigger(name: $name, visit: $visit) {
+        mutation enableTrigger($name: String!) {
+        enableTrigger(name: $name) {
             name
         }
         }
         """
-        variables = {"name": name, "visit": self.get_visit_input(instrument_session)}
-        data = self.execute_query(query, variables)
+        data = self.execute_query(query, {"name": name})
         return data["enableTrigger"]
 
-    def delete_trigger(self, name: str, instrument_session: str | None = None) -> dict:
+    def delete_trigger(self, name: str) -> dict:
         """delete a trigger by name."""
 
         query = """
-        mutation deleteTrigger($name: String!, $visit: VisitInput) {
-        deleteTrigger(name: $name, visit: $visit) {
+        mutation deleteTrigger($name: String!) {
+        deleteTrigger(name: $name) {
             name
         }
         }
         """
-        variables = {"name": name, "visit": self.get_visit_input(instrument_session)}
-        data = self.execute_query(query, variables)
+        data = self.execute_query(query, {"name": name})
         return data["deleteTrigger"]
 
     def get_triggers(self, limit: int = 10) -> list[dict]:
@@ -544,11 +541,11 @@ if __name__ == "__main__":
     # templates = client.get_workflow_templates()
     # print(templates)
 
-    client.submit_workflow_from_template(
-        template_name="i15-1-eiger-reduction-trigger",
-        instrument_session="cm44163-4",
-        parameters={},
-    )
+    # client.submit_workflow_from_template(
+    #     template_name="i15-1-eiger-reduction-trigger",
+    #     instrument_session="cm44163-4",
+    #     parameters={},
+    # )
 
     # print(client.get_proposal_codes("cm44163-3"))
 
@@ -556,6 +553,9 @@ if __name__ == "__main__":
     #     trigger_template="i15-1-eiger-reduction-trigger",
     # )
 
+    client.disable_trigger(name="i15-1-eiger-reduction-trigger-77w6b")
+
+    client.create_trigger(trigger_template="i15-1-eiger-reduction-trigger")
     # print(client.get_triggers())
 
     # client.delete_trigger("i15-1-eiger-reduction-trigger-fnz8r")
