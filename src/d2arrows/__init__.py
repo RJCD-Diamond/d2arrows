@@ -18,3 +18,7 @@ logging.basicConfig(
     datefmt="%H:%M:%S %d-%m-%Y",
 )
 logger = logging.getLogger(__name__)
+
+# httpx logs every request at INFO, which floods the output when using tiled
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("httpcore").setLevel(logging.WARNING)
