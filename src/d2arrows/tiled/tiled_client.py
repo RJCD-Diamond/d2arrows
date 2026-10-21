@@ -10,6 +10,8 @@ from tiled.client.composite import CompositeClient
 from tiled.client.container import Container
 from tiled.queries import Comparison, Eq
 
+from d2arrows.utils import split_instrument_session
+
 TILED_URL = "https://tiled.diamond.ac.uk"
 
 
@@ -17,8 +19,6 @@ tiled.client.utils.TILED_RETRY_ATTEMPTS = 1
 
 
 TILED_STALE_TIME = 60 * 60 * 24  # 1 day in seconds
-
-tiled_client = from_uri(uri=TILED_URL)
 
 
 def get_run_container_from_uid(uid: str):
@@ -190,12 +190,25 @@ def get_start_stop(run: Container):
 
 class TiledClient:
     def __init__(
-        self, beamline: str, url: str = TILED_URL, include_data_sources: bool = True
+        self,
+        beamline: str,
+        instrument_session: str,
+        url: str = TILED_URL,
+        include_data_sources: bool = True,
     ):
 
         self.beamline = beamline
+        self.instrument_session = instrument_session
+
+        proposal_code, proposal_number, visit_number = split_instrument_session(
+            self.instrument_session
+        )  # noqa - cm 44163 4
+
         # Data sources say where each node's data is stored, eg a file path
         self.client = from_uri(uri=url, include_data_sources=include_data_sources)
+        self.client = self.client[
+            f"/{self.beamline}/{proposal_code}{proposal_number}/{self.instrument_session}"
+        ]
         self.oldest_valid_time = time.time() - TILED_STALE_TIME
 
     def get_last_results_container(
@@ -216,9 +229,7 @@ class TiledClient:
 
         return results_container
 
-    def get_run_container(
-        self, instrument_session: str, scan_number: int
-    ) -> tuple[str, Container]:
+    def get_run_container(self, scan_number: int) -> tuple[str, Container]:
         """
         Find a scan's run in tiled.
 
@@ -231,22 +242,20 @@ class TiledClient:
 
         results_container = (
             self.client.search(Eq("start.instrument", self.beamline))
-            .search(Eq("start.instrument_session", instrument_session))
+            .search(Eq("start.instrument_session", self.instrument_session))
             .search(Eq("start.scan_id", scan_number))
         )
 
         if len(results_container) != 1:
             raise ValueError(
-                f"Expected 1 run for scan {scan_number} in {instrument_session}, "
+                f"Expected 1 run for scan {scan_number} in {self.instrument_session}, "
                 f"found {len(results_container)}"
             )
 
         uid = next(iter(results_container))
         return uid, results_container[uid]
 
-    def get_run(
-        self, instrument_session: str, scan_number: int
-    ) -> tuple[str, dict[str, dict | Any]]:
+    def get_run(self, scan_number: int) -> tuple[str, dict[str, dict | Any]]:
         """
         Find a scan's run in tiled and convert it to a dict.
 
@@ -259,33 +268,34 @@ class TiledClient:
             ValueError: If no run, or more than one, matches the scan number.
         """
 
-        uid, run_container = self.get_run_container(instrument_session, scan_number)
+        uid, run_container = self.get_run_container(scan_number)
         return uid, container_to_dict(run_container)
 
 
 class EigerTileDataLoader:
     def __init__(
         self,
+        instrument_session: str,
         uid: str | None = None,
-        scan_number: int | None = None,
         beamline: str = "i15-1",
+        scan_number: int | None = None,
     ):
 
         if (uid and scan_number is None) or (uid and scan_number is not None):
             raise ValueError("Either uid OR filenumber should be given")
 
-        tiled_client = TiledClient(beamline=beamline)
+        tiled_client = TiledClient(
+            beamline=beamline, instrument_session=instrument_session
+        )
 
         if scan_number is not None:
-            uid, run = tiled_client.get_run_container(
-                instrument_session="cm44163-4", scan_number=scan_number
-            )
+            uid, run = tiled_client.get_run_container(scan_number=scan_number)
 
 
 if __name__ == "__main__":
-    import json
+    # import json
 
-    tiled_client = TiledClient(beamline="i15-1")
+    tiled_client = TiledClient(beamline="i15-1", instrument_session="cm44163-4")
 
     # scan_uid, scan_meatadata_container = tiled_client.get_run_container(
     #     instrument_session="cm44163-4", scan_number=100262
@@ -313,9 +323,7 @@ if __name__ == "__main__":
     # 1. Get a scan as a dict: data values, detector file paths and the
     #    run's start metadata
     # ------------------------------------------------------------------
-    uid, run = tiled_client.get_run_container(
-        instrument_session="cm44163-4", scan_number=100262
-    )
+    uid, run = tiled_client.get_run_container(scan_number=100262)
 
     print(get_total_exposure_time(run))
 
@@ -329,7 +337,7 @@ if __name__ == "__main__":
     # run.metadata_revisions #Edits made to the metadata after  scan (0 for these runs)
     # run.parent	The container above it
 
-    uid, run = tiled_client.get_run(instrument_session="cm44163-4", scan_number=100262)
+    uid, run = tiled_client.get_run(scan_number=100262)
     print("uid:", uid)
     print("streams:", list(run))  # ['baseline', 'primary', 'data']
 
@@ -378,7 +386,7 @@ if __name__ == "__main__":
     order = data["time"].argsort()
     tth = data["tth"][order]
     temperature = data["blower-temperature"][order]
-    print("first readings:", list(zip(temperature[:3], tth[:3])))
+    # print("first readings:", list(zip(temperature[:3], tth[:3])))
 
     # ------------------------------------------------------------------
     # 4. Detector data is returned as the file it is stored in
@@ -389,9 +397,7 @@ if __name__ == "__main__":
     # ------------------------------------------------------------------
     # 5. Work with the tiled Container directly instead of a dict
     # ------------------------------------------------------------------
-    uid, run_container = tiled_client.get_run_container(
-        instrument_session="cm44163-4", scan_number=100225
-    )
+    uid, run_container = tiled_client.get_run_container(scan_number=100225)
     print("specs:", run_container.specs)  # [Spec('BlueskyRun', ...)]
     print("access tags:", run_container.access_blob["tags"])
     # tiled types metadata as any JSON value, so cast to index into it
