@@ -200,7 +200,7 @@ class TiledClient:
         self.beamline = beamline
         self.instrument_session = instrument_session
 
-        proposal_code, proposal_number, visit_number = split_instrument_session(
+        proposal_code, proposal_number, _ = split_instrument_session(
             self.instrument_session
         )  # noqa - cm 44163 4
 
