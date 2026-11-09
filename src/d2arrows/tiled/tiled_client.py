@@ -1,19 +1,30 @@
 import json
 import time
+from collections.abc import Generator
 from copy import deepcopy
+from pathlib import Path
 from typing import Any, cast
 from urllib.parse import urlparse
 
+import matplotlib.pyplot as plt
+import numpy as np
 import tiled.client.utils
 from tiled.client import from_uri
 from tiled.client.composite import CompositeClient
 from tiled.client.container import Container
-from tiled.queries import Comparison, Eq
+from tiled.queries import Eq  # Comparison
 
 from d2arrows.utils import split_instrument_session
 
-TILED_URL = "https://tiled.diamond.ac.uk"
+TILED_PROD_URL = "https://tiled.diamond.ac.uk"
+TILED_TEST_URL = "https://tiled-testing.diamond.ac.uk"
 
+dev = True
+
+if dev:
+    TILED_URL = TILED_TEST_URL
+else:
+    TILED_URL = TILED_PROD_URL
 
 tiled.client.utils.TILED_RETRY_ATTEMPTS = 1
 
@@ -26,7 +37,9 @@ def get_run_container_from_uid(uid: str):
     return from_uri(f"{TILED_URL}/api/v1/metadata/{uid}")
 
 
-def get_total_exposure_time(run: Container) -> float:
+def get_total_exposure_time(
+    run: Container, primary_detector: str = "fastcs_eiger"
+) -> float:
     """
     Return a run's total detector exposure time in seconds.
 
@@ -43,7 +56,7 @@ def get_total_exposure_time(run: Container) -> float:
     frames = stop.get("num_events", {}).get("data")
     if frames is None:
         data_keys = cast(dict[str, Any], run["primary"].metadata["data_keys"])
-        frames = data_keys["fastcs_eiger"]["shape"][0]
+        frames = data_keys[primary_detector]["shape"][0]
 
     return frames * start["exposure_time_per_frame"]
 
@@ -211,23 +224,78 @@ class TiledClient:
         ]
         self.oldest_valid_time = time.time() - TILED_STALE_TIME
 
-    def get_last_results_container(
+    def get_last_finished_scan(
         self,
-        instrument_session: str,
         oldest_time: float | None = None,
         exit_status: str = "success",
-    ) -> Container:
-
-        oldest_valid_time = oldest_time or self.oldest_valid_time
+    ) -> tuple[str, Container]:
 
         results_container = (
             self.client.search(Eq("start.instrument", self.beamline))
-            .search(Eq("start.instrument_session", instrument_session))
+            .search(Eq("start.instrument_session", self.instrument_session))
             .search(Eq("stop.exit_status", exit_status))
-            .search(Comparison("ge", "stop.time", oldest_valid_time))
         )
 
-        return results_container
+        last_uid = list(results_container)[-1]
+
+        last_run = results_container[last_uid]
+
+        print(last_run.metadata["start"]["scan_id"])
+
+        return last_uid, last_run
+
+    def get_run_ids(self):
+
+        results_container = self.client.search(
+            Eq("start.instrument", self.beamline)
+        ).search(Eq("start.instrument_session", self.instrument_session))
+
+        run_uids = list(results_container)
+
+        return run_uids
+
+    def get_run_numbers(self):
+        """this is so slow it's unusable -  the needs fixing in tiled itself i think"""
+
+        stop_path = Path("/workspaces/outputs/i15-1/run_stop.txt")
+        stop_path.touch() if not stop_path.exists() else stop_path.unlink()
+
+        results_container = self.client.search(
+            Eq("start.instrument", self.beamline)
+        ).search(Eq("start.instrument_session", self.instrument_session))
+
+        with stop_path.open("a") as f:
+            for uid in list(results_container)[::-1]:
+                scan = results_container[uid]
+                scan_id = scan.metadata["start"]["scan_id"]
+
+                try:
+                    eiger_shape = scan["primary"]["fastcs_eiger"].shape
+                except Exception as e:
+                    print(e)
+                    eiger_shape = ()
+
+                try:
+                    data_shape = scan["data"]
+                except Exception as e:
+                    print(e)
+                    data_shape = ()
+
+                try:
+                    num_events = scan.metadata["stop"]["num_events"]
+                except Exception:
+                    num_events = {}
+
+                f.write(
+                    f"{scan_id}, {scan}, {eiger_shape=}, {data_shape=}, {num_events} \n"
+                )
+                print(
+                    f"{scan_id}, {scan}, {eiger_shape=}, {data_shape=}, {num_events} \n"
+                )
+
+        raise NotImplementedError(
+            "this is so slow it's unusable -  the needs fixing in tiled itself i think"
+        )
 
     def get_run_container(self, scan_number: int) -> tuple[str, Container]:
         """
@@ -252,7 +320,7 @@ class TiledClient:
                 f"found {len(results_container)}"
             )
 
-        uid = next(iter(results_container))
+        uid = list(results_container)[0]
         return uid, results_container[uid]
 
     def get_run(self, scan_number: int) -> tuple[str, dict[str, dict | Any]]:
@@ -272,6 +340,22 @@ class TiledClient:
         return uid, container_to_dict(run_container)
 
 
+def get_stop_doc(run: Container) -> dict | None:
+    try:
+        stop_doc = cast(dict[str, Any], run.metadata["stop"])
+    except Exception as e:
+        print(e)
+        stop_doc = None
+
+    return stop_doc
+
+
+def get_start_doc(run: Container) -> dict | None:
+
+    start_doc = cast(dict[str, Any], run.metadata["start"])
+    return start_doc
+
+
 class EigerTileDataLoader:
     def __init__(
         self,
@@ -289,13 +373,64 @@ class EigerTileDataLoader:
         )
 
         if scan_number is not None:
-            uid, run = tiled_client.get_run_container(scan_number=scan_number)
+            uid, self.run = tiled_client.get_run_container(scan_number=scan_number)
+        else:
+            uid, self.run = tiled_client.get_last_finished_scan()
+
+        @property
+        def start_doc(self):
+            return get_start_doc(self.run)
+
+
+def iterate_frames(
+    run: Container, primary_name: str | None = None, poll_interval: float = 1.0
+) -> Generator:
+    """Iterates a the data from a particular primary detector,
+    if primary_name not given, it's the first"""
+
+    if primary_name is None:
+        primary_name = list(run["primary"])[0]
+        print(primary_name)
+
+    stop_doc = get_stop_doc(run)
+
+    if stop_doc is not None:
+        data = run["primary"][primary_name]
+        # if we already have a stop doc, the run has already finished
+        # and it's much faster to do this than refresh every iteration
+        yield from data
+    else:
+        current_frame = 0
+
+        while True:
+            run.refresh()
+            data = run["primary"][primary_name]
+            data_length = len(data)
+
+            if data_length > current_frame:
+                yield data[current_frame]
+                current_frame = current_frame + 1
+            else:
+                time.sleep(poll_interval)
+
+            stop_doc = get_stop_doc(run)
+
+            if (stop_doc is not None) and (current_frame == data_length):
+                # if a stop doc is present, then the data length is the size and
+                # it won't change. If we have also yielded every frame then we're done
+                break
 
 
 if __name__ == "__main__":
-    # import json
-
     tiled_client = TiledClient(beamline="i15-1", instrument_session="cm44163-4")
+
+    uid, run = tiled_client.get_run_container(scan_number=100245)
+    data = run["primary"]["fastcs_eiger"]
+
+    for frame in iterate_frames(run):
+        print(frame)
+
+    quit()
 
     # scan_uid, scan_meatadata_container = tiled_client.get_run_container(
     #     instrument_session="cm44163-4", scan_number=100262
@@ -325,7 +460,28 @@ if __name__ == "__main__":
     # ------------------------------------------------------------------
     uid, run = tiled_client.get_run_container(scan_number=100262)
 
-    print(get_total_exposure_time(run))
+    print(run)
+
+    quit()
+
+    for frame in iterate_frames(run):
+        plt.imshow(frame)
+        plt.show()
+
+    uid, run = tiled_client.get_run_container(scan_number=100262)
+
+    print(run.metadata)
+
+    data_container = run["primary"]["fastcs_eiger"]
+
+    print(len(data_container))
+
+    data = np.array(data_container)
+
+    plt.imshow(data[0])
+    plt.show()
+
+    quit()
 
     # list(run), run["primary"], items() #The streams: baseline, primary, data.
     # run.item["id"] / run.path_parts # The run's ID, and its path from the top of tiled
@@ -340,6 +496,8 @@ if __name__ == "__main__":
     uid, run = tiled_client.get_run(scan_number=100262)
     print("uid:", uid)
     print("streams:", list(run))  # ['baseline', 'primary', 'data']
+
+    print(run)
 
     print(run["metadata"].keys())
     print(run["baseline"].keys())

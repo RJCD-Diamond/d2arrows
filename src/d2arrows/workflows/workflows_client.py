@@ -553,12 +553,12 @@ if __name__ == "__main__":
     #     trigger_template="i15-1-eiger-reduction-trigger",
     # )
 
-    client.disable_trigger(name="i15-1-eiger-reduction-trigger-77w6b")
+    # client.disable_trigger(name="i15-1-eiger-reduction-trigger-77w6b")
 
-    client.create_trigger(trigger_template="i15-1-eiger-reduction-trigger")
+    # client.create_trigger(trigger_template="i11-fast-trigger-trigger")
     # print(client.get_triggers())
 
-    # client.delete_trigger("i15-1-eiger-reduction-trigger-fnz8r")
+    client.delete_trigger("i15-1-eiger-reduction-trigger-77w6b")
 
     # client.disable_trigger("i15-1-eiger-reduction-trigger-fnz8r")
 
