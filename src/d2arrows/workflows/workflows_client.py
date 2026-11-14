@@ -534,7 +534,7 @@ def benchmark_workflows(
 
 
 if __name__ == "__main__":
-    client = WorkflowsClient("cm44163-4", science_group="CRYSTALLOGRAPHY")
+    client = WorkflowsClient("cm44163-5", science_group="CRYSTALLOGRAPHY")
 
     # benchmark_workflows()
 
@@ -555,10 +555,10 @@ if __name__ == "__main__":
 
     # client.disable_trigger(name="i15-1-eiger-reduction-trigger-77w6b")
 
-    # client.create_trigger(trigger_template="i11-fast-trigger-trigger")
+    client.create_trigger(trigger_template="i11-mythen-trigger")
     # print(client.get_triggers())
 
-    client.delete_trigger("i15-1-eiger-reduction-trigger-77w6b")
+    # client.delete_trigger("i11-fast-trigger-trigger-blrz9")
 
     # client.disable_trigger("i15-1-eiger-reduction-trigger-fnz8r")
 

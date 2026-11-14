@@ -19,7 +19,7 @@ from d2arrows.utils import split_instrument_session
 TILED_PROD_URL = "https://tiled.diamond.ac.uk"
 TILED_TEST_URL = "https://tiled-testing.diamond.ac.uk"
 
-dev = True
+dev = False
 
 if dev:
     TILED_URL = TILED_TEST_URL
@@ -218,7 +218,9 @@ class TiledClient:
         )  # noqa - cm 44163 4
 
         # Data sources say where each node's data is stored, eg a file path
-        self.client = from_uri(uri=url, include_data_sources=include_data_sources)
+        self.client: Container = from_uri(
+            uri=url, include_data_sources=include_data_sources
+        )
         self.client = self.client[
             f"/{self.beamline}/{proposal_code}{proposal_number}/{self.instrument_session}"
         ]
@@ -383,7 +385,10 @@ class EigerTileDataLoader:
 
 
 def iterate_frames(
-    run: Container, primary_name: str | None = None, poll_interval: float = 1.0
+    run: Container,
+    primary_name: str | None = None,
+    poll_interval: float = 1.0,
+    timeout: float | None = None,
 ) -> Generator:
     """Iterates a the data from a particular primary detector,
     if primary_name not given, it's the first"""
@@ -404,31 +409,40 @@ def iterate_frames(
 
         while True:
             run.refresh()
+            stop_doc = get_stop_doc(run)
+
             data = run["primary"][primary_name]
             data_length = len(data)
 
             if data_length > current_frame:
+                # if we have another frame to show
                 yield data[current_frame]
                 current_frame = current_frame + 1
             else:
+                print(f"No more frames present after {current_frame} frames...")
                 time.sleep(poll_interval)
 
-            stop_doc = get_stop_doc(run)
-
             if (stop_doc is not None) and (current_frame == data_length):
-                # if a stop doc is present, then the data length is the size and
+                # if a stop doc is present, then the data length is the full size and
                 # it won't change. If we have also yielded every frame then we're done
                 break
 
 
 if __name__ == "__main__":
+    from d2arrows.core.data_models import ImageData
+
     tiled_client = TiledClient(beamline="i15-1", instrument_session="cm44163-4")
 
-    uid, run = tiled_client.get_run_container(scan_number=100245)
-    data = run["primary"]["fastcs_eiger"]
+    uid, run = tiled_client.get_run_container(scan_number=100260)
 
-    for frame in iterate_frames(run):
-        print(frame)
+    for n, frame in enumerate(iterate_frames(run)):
+        print(n)
+        plt.imshow(frame)
+        plt.show()
+
+        image = ImageData.from_array(frame)
+
+        image.to_file(f"{Path(__file__).parent / 'file.jpg'}")
 
     quit()
 
